@@ -56,6 +56,8 @@ type Client interface {
 	// partition. Offline replicas are replicas which are offline
 	OfflineReplicas(topic string, partitionID int32) ([]int32, error)
 
+	RefreshBrokersWithNewSeedBrokers(seedBrokers []*Broker) error
+
 	// RefreshMetadata takes a list of topics and queries the cluster to refresh the
 	// available metadata for those topics. If no topics are provided, it will refresh
 	// metadata for all topics.
@@ -427,6 +429,23 @@ func (client *client) Leader(topic string, partitionID int32) (*Broker, error) {
 	}
 
 	return leader, err
+}
+
+func (client *client) RefreshBrokersWithNewSeedBrokers(seedBrokers []*Broker) error {
+	if client.Closed() {
+		return ErrClosedClient
+	}
+
+	client.lock.Lock()
+	defer client.lock.Unlock()
+
+	for _, broker := range client.brokers {
+		_ = broker.Close()
+		delete(client.brokers, broker.ID())
+	}
+	client.seedBrokers = seedBrokers
+	client.deadSeeds = nil
+	return nil
 }
 
 func (client *client) RefreshMetadata(topics ...string) error {
